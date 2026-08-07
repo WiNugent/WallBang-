@@ -34,4 +34,9 @@ public class MenuManager : MonoBehaviour
             Debug.Log("Invalid Username");
         }
     }
+
+    public void CreateLobby()
+    {
+
+    }
 }
