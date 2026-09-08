@@ -5,9 +5,22 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
+  - enabled: 1
+    path: Assets/Scenes/Outdated/Menu.unity
+    guid: b18e0a7872b943944a1e391d97935092
+  - enabled: 1
+    path: Assets/Scenes/Outdated/Pre-Game Lobby.unity
+    guid: 253249f02df5b98439eaf9f465771c2d
+  - enabled: 1
+    path: Assets/Scenes/DM_Maze.unity
+    guid: a7546e9047b7cdb46aa1ad46c1fe0d47
+  - enabled: 1
+    path: Assets/Scenes/Pre-game Screen.unity
+    guid: 2ee84717e9c85224f95b7b19f05c4a07
   m_configObjects:
+    com.unity.input.settings: {fileID: 11400000, guid: 8c833ccd64636db4a850997bba63c9dc, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   m_UseUCBPForAssetBundles: 0
