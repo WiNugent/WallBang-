@@ -14,5 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Gun
   weaponName: Pistol
   damage: 50
-  fireRate: 5
+  fireRate: 2
   isHoldToShoot: 0
+  maxPenetrationDepth: 5
+  maxShootingDistance: 100

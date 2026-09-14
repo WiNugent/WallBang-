@@ -20,6 +20,9 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Pre-game Screen.unity
     guid: 2ee84717e9c85224f95b7b19f05c4a07
+  - enabled: 1
+    path: Assets/Scenes/Desert.unity
+    guid: e89683d67c582fd4c926f007596a7d51
   m_configObjects:
     com.unity.input.settings: {fileID: 11400000, guid: 8c833ccd64636db4a850997bba63c9dc, type: 2}
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}

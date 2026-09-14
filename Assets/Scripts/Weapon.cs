@@ -3,7 +3,7 @@ using UnityEngine;
 public abstract class Weapon : ScriptableObject
 {
     [SerializeField] protected string weaponName;
-    [SerializeField] protected float damage;
+    [SerializeField] protected int damage;
     [SerializeField] protected float fireRate;
     [SerializeField] protected bool isHoldToShoot;
     [SerializeField] protected float maxPenetrationDepth;
@@ -11,7 +11,7 @@ public abstract class Weapon : ScriptableObject
 
     public abstract void Use();
 
-    public float GetDamageValue() { return damage; }
+    public int GetDamageValue() { return damage; }
 
     public float GetFireRateValue() { return fireRate; }
 

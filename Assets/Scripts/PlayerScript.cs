@@ -1,4 +1,7 @@
 using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using Unity.Collections;
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEditor.PackageManager;
@@ -6,9 +9,13 @@ using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
 using static UnityEngine.Rendering.DebugUI;
+using static UnityEngine.UI.Image;
 
 public class PlayerScript : NetworkBehaviour
 {
+
+    const int MAX_SHOOT_RANGE = 100;
+
     [SerializeField] GameObject playerCamera;
     [SerializeField] Rigidbody rb;
 
@@ -17,14 +24,21 @@ public class PlayerScript : NetworkBehaviour
     [SerializeField] float mouseSensitivity;
 
     [Header("Client Specific Objects")]
-    [SerializeField] GameObject playerCam;
-    [SerializeField] PlayerInput playerInput;
-    [SerializeField] Animator animator;
+    [SerializeField] private GameObject playerCam;
+    [SerializeField] private PlayerInput playerInput;
+    [SerializeField] private GameObject playerUIPrefab;
+    [SerializeField] private Animator animator;
+    [SerializeField] private NetworkAnimator networkAnimator;
+    [SerializeField] private NetworkTransform playerNetTransform;
+    [SerializeField] private SkinnedMeshRenderer playerSkinMeshRenderer;
+    [SerializeField] private AudioSource gunAudioSource;
+    private PlayerUI playerUI;
 
     [Header("Player Stats")]
     [SerializeField] private float playerSpeed;
-    public NetworkVariable<int> playerHealth = new NetworkVariable<int>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Owner);
-    public NetworkVariable<Color> playerColor = new NetworkVariable<Color>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Owner);
+    public NetworkVariable<int> playerHealth = new NetworkVariable<int>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Server);
+    public NetworkVariable<Color> playerColor = new NetworkVariable<Color>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Server);
+    public NetworkVariable<FixedString32Bytes> playerName = new NetworkVariable<FixedString32Bytes>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Owner);
     [SerializeField] Gun equippedGun;
 
     private UnityEvent onDeath = new UnityEvent();
@@ -36,44 +50,68 @@ public class PlayerScript : NetworkBehaviour
     private Vector2 flatMoveDirection = Vector2.zero;
     private Vector3 moveDirection = Vector3.zero;
 
-    
+    Dictionary<ulong, HashSet<Collider>> playerColliders = new Dictionary<ulong, HashSet<Collider>>();
+
     [SerializeField] private LayerMask playerBodyLayer;
     [SerializeField] private LayerMask shootThroughLayers;
 
-/*
-    private void Awake()
-    {
-        onDeath = new UnityEvent();
-    }*/
+    [SerializeField] Material[] possiblePlayerSkins;
+
 
     public override void OnNetworkSpawn()
     {
         base.OnNetworkSpawn();
-        onDeath.AddListener(OnPlayerDeath);
         shootThroughLayers += playerBodyLayer; // We will also shoot through the player
+
+
+        playerSkinMeshRenderer.material = possiblePlayerSkins[OwnerClientId];
+
+        Collider[] spawnedPlayerColliders = GetComponentsInChildren<Collider>(includeInactive: true);
+        playerColliders[OwnerClientId] = new HashSet<Collider>(spawnedPlayerColliders);
 
         if (IsOwner)
         {
+            playerName.OnValueChanged += OnNameChanged;
+            playerName.Value = MenuData.playerName;
+
+
+            playerHealth.OnValueChanged += OnHealthChanged;
+            onDeath.AddListener(OnPlayerDeath);
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
             playerCam.SetActive(true);
             playerInput.enabled = true;
+
+
+            playerUI = Instantiate(playerUIPrefab).GetComponent<PlayerUI>();
+            playerUI.UpdateHealthPoints(playerHealth.Value);
+            playerUI.playerScript = this;
+
+            TeleportRandomSpawn();
+
         }
 
     }
 
+
+    public override void OnNetworkDespawn()
+    {
+        base.OnNetworkDespawn();
+
+        if (IsServer)
+        {
+            playerColliders.Remove(OwnerClientId);
+        }
+    }
+
+
     public void OnFire(InputValue value)
     {
-
-        
-        if (!IsOwner)
-            return;
-
-            animator.SetFloat("FireSpeed", equippedGun.GetFireRateValue()/5);
+        animator.SetFloat("FireSpeed", equippedGun.GetFireRateValue()/5);
 
         if (!equippedGun.GetIsHoldToShoot() && value.isPressed)
         {
-            FireRpc();
+            Fire();
             return;
         }
 
@@ -98,61 +136,113 @@ public class PlayerScript : NetworkBehaviour
     {
         while (true)
         {
-            FireRpc();
+            Fire();
             yield return new WaitForSeconds(1 / equippedGun.GetFireRateValue());
         }
     }
 
-    [Rpc(SendTo.Everyone)]
-    void FireRpc()
+    void Fire()
     {
-        
-        animator.SetTrigger("Fire");
-        Debug.Log("Fire! from " + OwnerClientId);
+        Debug.DrawLine(playerCam.transform.position, playerCam.transform.forward * MAX_SHOOT_RANGE);
+        networkAnimator.SetTrigger("Fire");
 
         Vector3 shootingOrigin = playerCam.transform.position;
         Vector3 direction = playerCam.transform.forward;
-        float remainingWallPenetration = equippedGun.GetMaxPenetrationDepth();
+        float maxPenetration = equippedGun.GetMaxPenetrationDepth();
+        ulong shooterId = OwnerClientId;
 
-        TryPenetrateWall(shootingOrigin, direction, remainingWallPenetration, 100);
+        AudioManager.Instance.PlaySoundFromSource(AudioManager.Sounds.shootCrunch, gunAudioSource);
 
+        Debug.Log(OwnerClientId + " shot");
+
+        //TryPenetrateWallRPC(gameObject.transform, equippedGun, shootingOrigin, direction, remainingWallPenetration, 100);
+        TryServerShootRPC(shootingOrigin, direction, shooterId, equippedGun.GetDamageValue(), maxPenetration, MAX_SHOOT_RANGE);
 
     }
 
-    private void TryPenetrateWall(Vector3 origin, Vector3 direction, float remainingPenetration, float remainingDistance)
+
+
+    [Rpc(SendTo.Server)]
+    private void TryServerShootRPC(Vector3 origin, Vector3 direction, ulong shooterId, int gunDamage, float totalPenetration, float maxDistance)
     {
-        if (remainingDistance <= 0) {
-            Debug.Log("This bullet has fallen off at distance");
-            return;
-        }
+        bool isWallbang = false;
+        RaycastHit[] hits = Physics.RaycastAll(origin, direction, maxDistance, shootThroughLayers, QueryTriggerInteraction.Collide);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
-        RaycastHit hit;
-        // Logic for detecting thickness of wall
-        if(Physics.Raycast(origin, direction, out hit, remainingDistance, shootThroughLayers)) {
-            Debug.Log("Hit at " + hit.point);
-            for (float i = 0; i < remainingPenetration; i += 0.2f)
+        foreach (RaycastHit hit in hits) {
+            Debug.Log(hit.collider.name);
+
+            if (IsShooterCollider(shooterId, hit.collider)) continue;
+            
+
+            if ((playerBodyLayer.value & (1 << hit.collider.transform.gameObject.layer)) != 0)
             {
-                RaycastHit hitExit;
-                if(Physics.Raycast(hit.point + direction * i, -direction, out hitExit, remainingPenetration, shootThroughLayers))
+                if (isWallbang) // Only hit players through walls
                 {
-                    remainingPenetration -= Vector3.Distance(hit.point, hitExit.point);
-                    remainingDistance -= Vector3.Distance(origin, hitExit.point);
-                    Debug.Log("Wall penetrated");
-                    TryPenetrateWall(hitExit.point, direction, remainingPenetration, remainingDistance);
-                    return;
+                    PlayerScript hitPlayerScript = hit.transform.root.GetComponent<PlayerScript>();
+                    hitPlayerScript.playerHealth.Value -= gunDamage;
                 }
-                else
-                {
-                    continue;
-                }
-
+            } else
+            {
+                isWallbang = true;
             }
 
-            Debug.Log("Wall too thick");
+                Ray exitCheckRay = new Ray(hit.point + direction * totalPenetration, -direction);
+            if (hit.collider.Raycast(exitCheckRay, out RaycastHit exitHit, totalPenetration))
+            {
+                totalPenetration -= Vector3.Distance(hit.point, exitHit.point);
+                if (totalPenetration <= 0)
+                {
+                    Debug.Log("Wall too thick");
+                    return;
+                }
+            } else
+            {
+                Debug.Log("Wall too thick");
+                return;
+            }
+
         }
     }
 
+    public bool IsPlayerInCrosshair()
+    {
+        bool isWallbang = false;
+        Vector3 shootingOrigin = playerCam.transform.position;
+        Vector3 direction = playerCam.transform.forward;
+        float maxPenetration = equippedGun.GetMaxPenetrationDepth();
+        ulong shooterId = OwnerClientId;
 
+        RaycastHit[] hits = Physics.RaycastAll(shootingOrigin, direction, MAX_SHOOT_RANGE, shootThroughLayers, QueryTriggerInteraction.Collide);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        foreach (RaycastHit hit in hits)
+        {
+            if (IsShooterCollider(shooterId, hit.collider)) continue;
+
+
+            if ((playerBodyLayer.value & (1 << hit.collider.transform.gameObject.layer)) != 0)
+            {
+                if (isWallbang) return true;
+            }
+            else isWallbang = true;
+
+            Ray exitCheckRay = new Ray(hit.point + direction * maxPenetration, -direction);
+            if (hit.collider.Raycast(exitCheckRay, out RaycastHit exitHit, maxPenetration))
+                maxPenetration -= Vector3.Distance(hit.point, exitHit.point);
+            else // Wall too thick
+                return false;
+
+        }
+        return false;
+    }
+
+    bool IsShooterCollider(ulong shooterId, Collider collider)
+    {
+        return playerColliders.TryGetValue(shooterId, out var ownColliders) && ownColliders.Contains(collider);
+    }
+
+    // Upon getting input from mouse movement
     public void OnLook(InputValue value)
     {
         if (!IsOwner)
@@ -207,21 +297,43 @@ public class PlayerScript : NetworkBehaviour
         }
     }
 
-    private void OnPlayerDeath()
+    private void OnHealthChanged(int previousValue, int newValue)
     {
-        Debug.Log("You're dead");
-    }
+        playerUI.UpdateHealthPoints(newValue);
 
-    [Rpc(SendTo.Server)]
-    public void ModifyHealthRPC(int amount)
-    {
-        playerHealth.Value += amount;
-        if (playerHealth.Value <= 0)
+        if (newValue <= 0)
         {
             onDeath.Invoke();
         }
     }
 
+
+    private void OnNameChanged(FixedString32Bytes previousValue, FixedString32Bytes newValue)
+    {
+        Debug.Log("Player name IS " + playerName.Value);
+    }
+
+    private void OnPlayerDeath()
+    {
+        Debug.Log("You're dead");
+        ResetPlayerRPC();
+
+        TeleportRandomSpawn();
+    }
+
+    // Teleport and make sure that the player does not interpolate between original and spawn location
+    private void TeleportRandomSpawn()
+    {
+        Transform randomSpawnPointTransform = GameManager.Instance.GetRandomSpawnPoint().transform;
+        playerNetTransform.Teleport(randomSpawnPointTransform.position, randomSpawnPointTransform.rotation, randomSpawnPointTransform.localScale);
+    }
+
+
+    [Rpc(SendTo.Server)]
+    private void ResetPlayerRPC()
+    {
+        playerHealth.Value = 100;
+    }
 
     private void FixedUpdate()
     {

@@ -15,7 +15,9 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using UnityEngine.UIElements;
 using WebSocketSharp;
+using Random = UnityEngine.Random;
 
 public class GameManager : NetworkBehaviour
 {
@@ -28,15 +30,38 @@ public class GameManager : NetworkBehaviour
 
     [Header("Input Fields")]
     [SerializeField] private TMP_InputField roomCodeInputField;
+    [SerializeField] private TMP_Dropdown mapDropdown;
 
     [Header("Prefabs")]
     [SerializeField] private GameObject playerPrefab;
+    [HideInInspector] public static string playerNameTemp;
 
+    [Header("Other")]
+    public List<SpawnPoint> spawnPoints;
 
 
     private bool isSceneLoaded = false;
 
     private ISession currentSession;
+
+    public static GameManager Instance { get; private set; }
+
+    private void Awake()
+    {
+        // 2. Ensure only one instance exists in the scene
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject); // Destroys duplicates
+            return;
+        }
+
+        Instance = this;
+    }
+
+    public string GetPlayerName()
+    {
+        return playerNameTemp;
+    }
 
     private void Start()
     {
@@ -57,13 +82,13 @@ public class GameManager : NetworkBehaviour
 
         SessionOptions option = new SessionOptions().WithRelayNetwork();
 
-        option.MaxPlayers = 10;
+        option.MaxPlayers = 7;
 
         currentSession = await MultiplayerService.Instance.CreateSessionAsync(option);
         GUIUtility.systemCopyBuffer = currentSession.Code;
         Debug.Log(currentSession.Code + "Copied to Clipboard");
 
-        NetworkManager.Singleton.SceneManager.LoadScene("DM_Maze", UnityEngine.SceneManagement.LoadSceneMode.Single);
+        NetworkManager.Singleton.SceneManager.LoadScene(mapDropdown.options[mapDropdown.value].text, UnityEngine.SceneManagement.LoadSceneMode.Single);
         
     }
 
@@ -147,6 +172,19 @@ public class GameManager : NetworkBehaviour
 
         var netObj = playerInstance.GetComponent<NetworkObject>();
         netObj.SpawnAsPlayerObject(clientId);
+        
+        
+    }
+
+
+    public void AddSpawnpointToList(SpawnPoint spawnPoint)
+    {
+        spawnPoints.Add(spawnPoint);
+    }
+
+    public SpawnPoint GetRandomSpawnPoint()
+    {
+        return spawnPoints[Random.Range(0, spawnPoints.Count)];
     }
 
 }
