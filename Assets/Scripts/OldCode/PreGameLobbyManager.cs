@@ -1,11 +1,9 @@
-using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using TMPro;
 using Unity.Netcode;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Multiplayer;
-using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -69,12 +67,6 @@ public class PreGameLobbyManager : NetworkBehaviour
     private void OnApplicationQuit()
     {
         ShutDownNetwork();
-    }
-
-    private void OnDestroy()
-    {
-        Debug.Log("OnDestroy called");
-        //ShutDownNetwork();
     }
 
     private void ShutDownNetwork()

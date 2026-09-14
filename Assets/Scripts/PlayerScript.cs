@@ -1,15 +1,11 @@
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Collections;
 using Unity.Netcode;
 using Unity.Netcode.Components;
-using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
-using static UnityEngine.Rendering.DebugUI;
-using static UnityEngine.UI.Image;
 
 public class PlayerScript : NetworkBehaviour
 {
