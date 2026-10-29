@@ -3,7 +3,7 @@ using UnityEngine;
 
 public class AudioManager : NetworkBehaviour
 {
-    [SerializeField] private AudioClip[] audioClips;
+    [SerializeField] public AudioClip[] audioClips;
 
 
     public static AudioManager Instance { get; private set; }
@@ -24,24 +24,31 @@ public class AudioManager : NetworkBehaviour
     public enum Sounds
     {
         shootCrunch = 0,
-
+        glassHit = 1,
+        glassHeadshot = 2,
     }
 
 
-    public void PlaySoundAtPoint(Sounds soundEnum, Vector3 soundLocation)
+    [Rpc(SendTo.Everyone)]
+    public void PlaySoundAtPointRPC(Sounds soundEnum, Vector3 soundLocation)
     {
         AudioSource.PlayClipAtPoint(audioClips[(int)soundEnum], soundLocation);
+    }
+
+    public void PlaySoundAtPoint(Sounds soundEnum, Vector3 soundLocation, float pitch)
+    {
+        GameObject tempGO = new GameObject("TempAudio");
+        tempGO.transform.position = soundLocation;
+
+        AudioSource audioSource = tempGO.AddComponent<AudioSource>();
+        audioSource.clip = audioClips[(int)soundEnum];
+        audioSource.pitch = pitch;
+        audioSource.Play();
+        Object.Destroy(tempGO, audioClips[(int)soundEnum].length);
     }
 
     public void PlaySoundFromSource(Sounds soundEnum, AudioSource audioSource)
     {
         audioSource.PlayOneShot(audioClips[(int)soundEnum]);
     }
-/*
-    [Rpc(SendTo.Everyone)]
-    public void PlaySoundFromSourceForAllRpc(Sounds soundEnum, AudioSource audioSource)
-    {
-        audioSource.PlayOneShot(audioClips[(int)soundEnum]);
-    }*/
-    
 }

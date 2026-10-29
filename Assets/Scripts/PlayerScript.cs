@@ -6,6 +6,7 @@ using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.InputSystem;
+using static AudioManager;
 
 public class PlayerScript : NetworkBehaviour
 {
@@ -35,6 +36,7 @@ public class PlayerScript : NetworkBehaviour
     public NetworkVariable<int> playerHealth = new NetworkVariable<int>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Server);
     public NetworkVariable<Color> playerColor = new NetworkVariable<Color>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Server);
     public NetworkVariable<FixedString32Bytes> playerName = new NetworkVariable<FixedString32Bytes>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Owner);
+    public NetworkVariable<int> playerKillCount = new NetworkVariable<int>(readPerm: NetworkVariableReadPermission.Everyone, writePerm: NetworkVariableWritePermission.Server);
     [SerializeField] Gun equippedGun;
 
     private UnityEvent onDeath = new UnityEvent();
@@ -42,6 +44,7 @@ public class PlayerScript : NetworkBehaviour
 
     private float upDownRotation = 45f;
     private bool isMoving = false;
+    private float nextTimeToFire = 0;
 
     private Vector2 flatMoveDirection = Vector2.zero;
     private Vector3 moveDirection = Vector3.zero;
@@ -70,6 +73,7 @@ public class PlayerScript : NetworkBehaviour
             playerName.OnValueChanged += OnNameChanged;
             playerName.Value = MenuData.playerName;
 
+            playerKillCount.OnValueChanged += OnKillCountChanged;
 
             playerHealth.OnValueChanged += OnHealthChanged;
             onDeath.AddListener(OnPlayerDeath);
@@ -103,21 +107,24 @@ public class PlayerScript : NetworkBehaviour
 
     public void OnFire(InputValue value)
     {
-        animator.SetFloat("FireSpeed", equippedGun.GetFireRateValue()/5);
+        animator.SetFloat("FireSpeed", equippedGun.GetFireRateValue() / 5);
 
+        // If this is a weapon that is semi-automatic
         if (!equippedGun.GetIsHoldToShoot() && value.isPressed)
         {
             Fire();
             return;
         }
 
+        // If automatic
         if (value.isPressed)
         {
             if (firingLoopCoroutine == null)
             {
                 firingLoopCoroutine = StartCoroutine(FireHeldLoop());
             }
-        } else
+        }
+        else
         {
             if (firingLoopCoroutine != null)
             {
@@ -127,12 +134,28 @@ public class PlayerScript : NetworkBehaviour
         }
 
     }
+    /*
+        public void OnFire(InputValue value)
+        {
+            animator.SetFloat("FireSpeed", equippedGun.GetFireRateValue() / 5);
 
+            if (value.isPressed && nextTimeToFire < Time.time)
+            {
+                Fire();
+                nextTimeToFire = Time.time + (1 / equippedGun.GetFireRateValue());
+            }
+        }
+    */
     private IEnumerator FireHeldLoop()
     {
         while (true)
         {
+            if (nextTimeToFire > Time.time)
+            {
+                yield return new WaitForSeconds(nextTimeToFire - Time.time);
+            }
             Fire();
+            nextTimeToFire = Time.time + (1 / equippedGun.GetFireRateValue());
             yield return new WaitForSeconds(1 / equippedGun.GetFireRateValue());
         }
     }
@@ -147,16 +170,12 @@ public class PlayerScript : NetworkBehaviour
         float maxPenetration = equippedGun.GetMaxPenetrationDepth();
         ulong shooterId = OwnerClientId;
 
-        AudioManager.Instance.PlaySoundFromSource(AudioManager.Sounds.shootCrunch, gunAudioSource);
+        AudioManager.Instance.PlaySoundAtPointRPC(AudioManager.Sounds.shootCrunch, gunAudioSource.transform.position);
 
         Debug.Log(OwnerClientId + " shot");
 
-        //TryPenetrateWallRPC(gameObject.transform, equippedGun, shootingOrigin, direction, remainingWallPenetration, 100);
         TryServerShootRPC(shootingOrigin, direction, shooterId, equippedGun.GetDamageValue(), maxPenetration, MAX_SHOOT_RANGE);
-
     }
-
-
 
     [Rpc(SendTo.Server)]
     private void TryServerShootRPC(Vector3 origin, Vector3 direction, ulong shooterId, int gunDamage, float totalPenetration, float maxDistance)
@@ -166,7 +185,7 @@ public class PlayerScript : NetworkBehaviour
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
         foreach (RaycastHit hit in hits) {
-            Debug.Log(hit.collider.name);
+            //Debug.Log(hit.collider.name);
 
             if (IsShooterCollider(shooterId, hit.collider)) continue;
             
@@ -176,7 +195,28 @@ public class PlayerScript : NetworkBehaviour
                 if (isWallbang) // Only hit players through walls
                 {
                     PlayerScript hitPlayerScript = hit.transform.root.GetComponent<PlayerScript>();
-                    hitPlayerScript.playerHealth.Value -= gunDamage;
+
+                    float pitch = 1f;
+                    if (hit.collider.CompareTag("Head"))
+                    {
+                        hitPlayerScript.playerHealth.Value -= gunDamage * 2;
+                        if (hitPlayerScript.playerHealth.Value <= 0)
+                        {
+                            pitch = 0.6f;
+                            playerKillCount.Value += 1;
+                        }
+                        PlayAudioLocallyRPC(AudioManager.Sounds.glassHeadshot, transform.position, pitch);
+                    } else
+                    {
+                        hitPlayerScript.playerHealth.Value -= gunDamage;
+                        if (hitPlayerScript.playerHealth.Value <= 0)
+                        {
+                            pitch = 0.6f;
+                            playerKillCount.Value += 1;
+                        }
+                        PlayAudioLocallyRPC(AudioManager.Sounds.glassHit, transform.position, pitch);
+                    }
+
                 }
             } else
             {
@@ -189,16 +229,27 @@ public class PlayerScript : NetworkBehaviour
                 totalPenetration -= Vector3.Distance(hit.point, exitHit.point);
                 if (totalPenetration <= 0)
                 {
-                    Debug.Log("Wall too thick");
+                    //Debug.Log("Wall too thick");
                     return;
                 }
             } else
             {
-                Debug.Log("Wall too thick");
+                //Debug.Log("Wall too thick");
                 return;
             }
 
         }
+    }
+
+    public void LocalMessageRPC(string messsage)
+    {
+        Debug.Log(messsage);
+    }
+
+    [Rpc(SendTo.Owner)]
+    public void PlayAudioLocallyRPC(Sounds soundEnum, Vector3 soundLocation, float pitch)
+    {
+        AudioManager.Instance.PlaySoundAtPoint(soundEnum, soundLocation, pitch);
     }
 
     public bool IsPlayerInCrosshair()
@@ -303,6 +354,13 @@ public class PlayerScript : NetworkBehaviour
         }
     }
 
+    private void OnKillCountChanged(int previousValue, int newValue)
+    {
+        Debug.Log("Kills " + previousValue + " -> " + newValue);
+        playerUI.UpdateScoreBoard(newValue);
+    }
+
+
 
     private void OnNameChanged(FixedString32Bytes previousValue, FixedString32Bytes newValue)
     {
@@ -330,6 +388,7 @@ public class PlayerScript : NetworkBehaviour
     {
         playerHealth.Value = 100;
     }
+
 
     private void FixedUpdate()
     {

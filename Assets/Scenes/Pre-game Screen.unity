@@ -267,8 +267,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 250072811}
-  - component: {fileID: 250072810}
   - component: {fileID: 250072812}
+  - component: {fileID: 250072810}
   m_Layer: 0
   m_Name: AudioManager
   m_TagString: Untagged
@@ -291,6 +291,8 @@ MonoBehaviour:
   ShowTopMostFoldoutHeaderGroup: 1
   audioClips:
   - {fileID: 8300000, guid: 5d25aabbeecf61c49b4438108de33861, type: 3}
+  - {fileID: 8300000, guid: 15092352609c6ff40a2b8dd2509abcb4, type: 3}
+  - {fileID: 8300000, guid: 89c9b00cf507a344d8e7f1a58bf5dfee, type: 3}
 --- !u!4 &250072811
 Transform:
   m_ObjectHideFlags: 0

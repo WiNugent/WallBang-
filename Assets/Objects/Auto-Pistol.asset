@@ -13,7 +13,7 @@ MonoBehaviour:
   m_Name: Auto-Pistol
   m_EditorClassIdentifier: Assembly-CSharp::Gun
   weaponName: Auto-Pistol
-  damage: 13
+  damage: 25
   fireRate: 4
   isHoldToShoot: 1
   maxPenetrationDepth: 5

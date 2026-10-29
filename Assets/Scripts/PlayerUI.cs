@@ -1,4 +1,5 @@
 using TMPro;
+using Unity.Services.Relay;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -6,6 +7,8 @@ public class PlayerUI : MonoBehaviour
 {
 
     [SerializeField] private TextMeshProUGUI healthPointsText;
+    [SerializeField] private TextMeshProUGUI roomCodeText;
+    [SerializeField] private TextMeshProUGUI scoreText;
     [SerializeField] private Image crosshair;
     public PlayerScript playerScript;
 
@@ -27,6 +30,11 @@ public class PlayerUI : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        roomCodeText.text = "ROOM CODE: " + GameManager.Instance.GetRoomCode();
+    }
+
 
     // Actual code here
 
@@ -35,10 +43,14 @@ public class PlayerUI : MonoBehaviour
         healthPointsText.text = "HP: " + newHealthPoints.ToString();
     }
 
+    public void UpdateScoreBoard(int newScore)
+    {
+        scoreText.text = newScore.ToString();
+    }
+
     private void Update()
     {
         if (playerScript.IsPlayerInCrosshair()) crosshair.color = Color.red;
         else crosshair.color = Color.white;
     }
-
 }

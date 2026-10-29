@@ -28,6 +28,7 @@ public class GameManager : NetworkBehaviour
     [Header("Prefabs")]
     [SerializeField] private GameObject playerPrefab;
     [HideInInspector] public static string playerNameTemp;
+    private static string roomCode;
 
     [Header("Other")]
     public List<SpawnPoint> spawnPoints;
@@ -79,7 +80,7 @@ public class GameManager : NetworkBehaviour
 
         currentSession = await MultiplayerService.Instance.CreateSessionAsync(option);
         GUIUtility.systemCopyBuffer = currentSession.Code;
-        Debug.Log(currentSession.Code + "Copied to Clipboard");
+        Debug.Log(currentSession.Code + " Copied to Clipboard");
 
         NetworkManager.Singleton.SceneManager.LoadScene(mapDropdown.options[mapDropdown.value].text, UnityEngine.SceneManagement.LoadSceneMode.Single);
         
@@ -178,6 +179,11 @@ public class GameManager : NetworkBehaviour
     public SpawnPoint GetRandomSpawnPoint()
     {
         return spawnPoints[Random.Range(0, spawnPoints.Count)];
+    }
+
+    public string GetRoomCode()
+    {
+        return currentSession.Code;
     }
 
 }

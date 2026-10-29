@@ -38,7 +38,7 @@ public class PreGameLobbyManager : NetworkBehaviour
         option.MaxPlayers = 10;
 
         currentSession = await MultiplayerService.Instance.CreateSessionAsync(option);
-        Debug.Log(currentSession.Code);
+        //Debug.Log(currentSession.Code);
 
         if (IsOwner)
             startGameButton.gameObject.SetActive(true);
